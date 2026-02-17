@@ -29,7 +29,7 @@ export function HomePage() {
 		},
 		onSuccess: (data) => {
 			queryClient.invalidateQueries({ queryKey: ["arenas"] });
-			if (data.success && data.data) {
+			if ("data" in data && data.data) {
 				window.location.href = `/arena/${data.data.arenaId}`;
 			}
 		},
