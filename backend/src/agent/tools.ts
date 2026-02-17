@@ -2,43 +2,46 @@ import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 
 /**
- * Roll dice in standard D&D notation (e.g. "2d6+3", "1d20", "4d8-1").
+ * Roll dice in D&D notation. Supports:
+ * - Basic: "2d6+3", "1d20", "4d8-1"
+ * - Keep highest: "2d20kh1+5" (advantage)
+ * - Keep lowest: "2d20kl1+5" (disadvantage)
+ * - Drop lowest: "4d6dl1" (stat rolling)
+ * - Drop highest: "4d6dh1"
  */
 export const rollDiceTool = createTool({
 	id: "roll-dice",
 	description:
-		"Roll dice using D&D notation like '2d6+3', '1d20', '4d8-1'. Returns individual rolls and total.",
+		"Roll dice using D&D notation. Supports basic ('2d6+3', '1d20'), advantage/disadvantage ('2d20kh1+5', '2d20kl1'), and drop ('4d6dl1'). Returns individual rolls, kept rolls, and total.",
 	inputSchema: z.object({
-		notation: z.string().describe("Dice notation, e.g. '2d6+3', '1d20', '4d8-1'"),
+		notation: z
+			.string()
+			.describe(
+				"Dice notation, e.g. '2d6+3', '1d20', '2d20kh1+5' (advantage), '2d20kl1' (disadvantage), '4d6dl1' (drop lowest)",
+			),
 		purpose: z.string().optional().describe("What the roll is for, e.g. 'attack roll', 'damage'"),
 	}),
 	outputSchema: z.object({
 		notation: z.string(),
 		rolls: z.array(z.number()),
+		kept: z.array(z.number()),
 		modifier: z.number(),
 		total: z.number(),
 		purpose: z.string().optional(),
 	}),
 	execute: async (input) => {
 		const { notation, purpose } = input;
-		const match = notation.match(/^(\d+)d(\d+)([+-]\d+)?$/i);
-
-		if (!match) {
-			throw new Error(`Invalid dice notation: ${notation}`);
-		}
-
-		const count = Number.parseInt(match[1], 10);
-		const sides = Number.parseInt(match[2], 10);
-		const modifier = match[3] ? Number.parseInt(match[3], 10) : 0;
+		const parsed = parseDiceNotation(notation);
 
 		const rolls: number[] = [];
-		for (let i = 0; i < count; i++) {
-			rolls.push(Math.floor(Math.random() * sides) + 1);
+		for (let i = 0; i < parsed.count; i++) {
+			rolls.push(Math.floor(Math.random() * parsed.sides) + 1);
 		}
 
-		const total = rolls.reduce((a, b) => a + b, 0) + modifier;
+		const kept = applyKeepDrop(rolls, parsed.keepDrop);
+		const total = kept.reduce((a, b) => a + b, 0) + parsed.modifier;
 
-		return { notation, rolls, modifier, total, purpose };
+		return { notation, rolls, kept, modifier: parsed.modifier, total, purpose };
 	},
 });
 
@@ -225,14 +228,58 @@ export const resolveAttackTool = createTool({
 
 // ── Pure helper functions for direct testing ──
 
-export function parseDiceNotation(notation: string) {
-	const match = notation.match(/^(\d+)d(\d+)([+-]\d+)?$/i);
+export interface KeepDrop {
+	type: "kh" | "kl" | "dh" | "dl";
+	n: number;
+}
+
+export interface ParsedDice {
+	count: number;
+	sides: number;
+	keepDrop: KeepDrop | null;
+	modifier: number;
+}
+
+/**
+ * Parse dice notation including keep/drop modifiers.
+ * Supports: "2d6+3", "2d20kh1+5", "4d6dl1", "2d20kl1-2"
+ */
+export function parseDiceNotation(notation: string): ParsedDice {
+	const match = notation.match(/^(\d+)d(\d+)(?:(kh|kl|dh|dl)(\d+))?([+-]\d+)?$/i);
 	if (!match) throw new Error(`Invalid dice notation: ${notation}`);
 	return {
 		count: Number.parseInt(match[1], 10),
 		sides: Number.parseInt(match[2], 10),
-		modifier: match[3] ? Number.parseInt(match[3], 10) : 0,
+		keepDrop: match[3]
+			? { type: match[3].toLowerCase() as KeepDrop["type"], n: Number.parseInt(match[4], 10) }
+			: null,
+		modifier: match[5] ? Number.parseInt(match[5], 10) : 0,
 	};
+}
+
+/**
+ * Apply keep/drop logic to a set of rolls.
+ * - kh(n): keep highest n
+ * - kl(n): keep lowest n
+ * - dh(n): drop highest n
+ * - dl(n): drop lowest n
+ */
+export function applyKeepDrop(rolls: number[], keepDrop: KeepDrop | null): number[] {
+	if (!keepDrop) return [...rolls];
+
+	const sorted = [...rolls].sort((a, b) => a - b);
+	const { type, n } = keepDrop;
+
+	switch (type) {
+		case "kh":
+			return sorted.slice(-n);
+		case "kl":
+			return sorted.slice(0, n);
+		case "dh":
+			return sorted.slice(0, Math.max(0, sorted.length - n));
+		case "dl":
+			return sorted.slice(n);
+	}
 }
 
 export function calculateAbilityModifier(score: number) {

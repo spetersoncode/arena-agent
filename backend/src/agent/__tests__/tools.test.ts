@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+	applyKeepDrop,
 	calculateAbilityModifier,
 	generateStatBlockTool,
 	parseDiceNotation,
@@ -11,19 +12,100 @@ import {
 
 describe("parseDiceNotation", () => {
 	it("parses standard notation", () => {
-		expect(parseDiceNotation("2d6+3")).toEqual({ count: 2, sides: 6, modifier: 3 });
+		expect(parseDiceNotation("2d6+3")).toEqual({
+			count: 2,
+			sides: 6,
+			keepDrop: null,
+			modifier: 3,
+		});
 	});
 
 	it("parses negative modifier", () => {
-		expect(parseDiceNotation("1d20-2")).toEqual({ count: 1, sides: 20, modifier: -2 });
+		expect(parseDiceNotation("1d20-2")).toEqual({
+			count: 1,
+			sides: 20,
+			keepDrop: null,
+			modifier: -2,
+		});
 	});
 
 	it("parses no modifier", () => {
-		expect(parseDiceNotation("4d8")).toEqual({ count: 4, sides: 8, modifier: 0 });
+		expect(parseDiceNotation("4d8")).toEqual({
+			count: 4,
+			sides: 8,
+			keepDrop: null,
+			modifier: 0,
+		});
+	});
+
+	it("parses keep highest (advantage)", () => {
+		expect(parseDiceNotation("2d20kh1+5")).toEqual({
+			count: 2,
+			sides: 20,
+			keepDrop: { type: "kh", n: 1 },
+			modifier: 5,
+		});
+	});
+
+	it("parses keep lowest (disadvantage)", () => {
+		expect(parseDiceNotation("2d20kl1")).toEqual({
+			count: 2,
+			sides: 20,
+			keepDrop: { type: "kl", n: 1 },
+			modifier: 0,
+		});
+	});
+
+	it("parses drop lowest (stat rolling)", () => {
+		expect(parseDiceNotation("4d6dl1")).toEqual({
+			count: 4,
+			sides: 6,
+			keepDrop: { type: "dl", n: 1 },
+			modifier: 0,
+		});
+	});
+
+	it("parses drop highest", () => {
+		expect(parseDiceNotation("4d6dh1-2")).toEqual({
+			count: 4,
+			sides: 6,
+			keepDrop: { type: "dh", n: 1 },
+			modifier: -2,
+		});
 	});
 
 	it("rejects invalid notation", () => {
 		expect(() => parseDiceNotation("banana")).toThrow("Invalid dice notation");
+	});
+});
+
+describe("applyKeepDrop", () => {
+	it("returns all rolls when no keep/drop", () => {
+		expect(applyKeepDrop([3, 1, 4], null)).toEqual([3, 1, 4]);
+	});
+
+	it("keeps highest n", () => {
+		expect(applyKeepDrop([3, 1, 5, 2], { type: "kh", n: 2 })).toEqual([3, 5]);
+	});
+
+	it("keeps lowest n", () => {
+		expect(applyKeepDrop([3, 1, 5, 2], { type: "kl", n: 2 })).toEqual([1, 2]);
+	});
+
+	it("drops lowest n", () => {
+		expect(applyKeepDrop([3, 1, 5, 2], { type: "dl", n: 1 })).toEqual([2, 3, 5]);
+	});
+
+	it("drops highest n", () => {
+		expect(applyKeepDrop([3, 1, 5, 2], { type: "dh", n: 1 })).toEqual([1, 2, 3]);
+	});
+
+	it("keeps highest 1 for advantage", () => {
+		expect(applyKeepDrop([8, 15], { type: "kh", n: 1 })).toEqual([15]);
+	});
+
+	it("keeps lowest 1 for disadvantage", () => {
+		expect(applyKeepDrop([8, 15], { type: "kl", n: 1 })).toEqual([8]);
 	});
 });
 
@@ -55,20 +137,43 @@ describe("rollDiceTool.execute", () => {
 		const result = await rollDiceTool.execute?.({ notation: "2d6+3", purpose: "damage" });
 
 		expect(result).toBeDefined();
-		// Mastra may wrap in validation — check the actual shape
-		if ("error" in (result as object)) {
-			// Validation error — skip
-			return;
-		}
-		const r = result as { notation: string; rolls: number[]; modifier: number; total: number };
+		if ("error" in (result as object)) return;
+		const r = result as {
+			notation: string;
+			rolls: number[];
+			kept: number[];
+			modifier: number;
+			total: number;
+		};
 		expect(r.notation).toBe("2d6+3");
 		expect(r.rolls).toHaveLength(2);
+		expect(r.kept).toHaveLength(2); // no keep/drop, all kept
 		expect(r.modifier).toBe(3);
 		for (const roll of r.rolls) {
 			expect(roll).toBeGreaterThanOrEqual(1);
 			expect(roll).toBeLessThanOrEqual(6);
 		}
-		expect(r.total).toBe(r.rolls.reduce((a, b) => a + b, 0) + 3);
+		expect(r.total).toBe(r.kept.reduce((a, b) => a + b, 0) + 3);
+	});
+
+	it("handles advantage notation (2d20kh1)", async () => {
+		const result = await rollDiceTool.execute?.({
+			notation: "2d20kh1+5",
+			purpose: "attack with advantage",
+		});
+
+		expect(result).toBeDefined();
+		if ("error" in (result as object)) return;
+		const r = result as {
+			rolls: number[];
+			kept: number[];
+			modifier: number;
+			total: number;
+		};
+		expect(r.rolls).toHaveLength(2);
+		expect(r.kept).toHaveLength(1);
+		expect(r.kept[0]).toBe(Math.max(...r.rolls));
+		expect(r.total).toBe(r.kept[0] + 5);
 	});
 });
 
