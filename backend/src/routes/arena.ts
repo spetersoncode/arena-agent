@@ -152,7 +152,9 @@ Run the ENTIRE combat to completion. Do not stop and ask for input. Be dramatic 
 			});
 
 			try {
-				const result = await arenaMasterAgent.stream(prompt);
+				// Default maxSteps is 5 — far too few for a full combat.
+				// A typical fight needs ~3 stat blocks + 3 initiative rolls + 3-5 attacks/round × 5-10 rounds = 30-60 tool calls.
+				const result = await arenaMasterAgent.stream(prompt, { maxSteps: 100 });
 				let fullText = "";
 
 				const reader = result.textStream.getReader();
