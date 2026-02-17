@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, Loader2, Play, Swords } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import Markdown from "react-markdown";
 import { Layout } from "@/components/layout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -182,9 +183,7 @@ export function ArenaPage({ arenaId }: { arenaId: string }) {
 
 						{combatText && (
 							<div className="prose prose-sm dark:prose-invert max-w-none">
-								<div className="whitespace-pre-wrap font-mono text-sm leading-relaxed">
-									{combatText}
-								</div>
+								<Markdown>{combatText}</Markdown>
 							</div>
 						)}
 

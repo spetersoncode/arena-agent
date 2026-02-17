@@ -11,6 +11,7 @@
 		"test:watch": "vitest"
 	},
 	"dependencies": {
+		"@tailwindcss/typography": "^0.5.19",
 		"@tailwindcss/vite": "^4.1.18",
 		"@tanstack/react-query": "^5.90.21",
 		"@tanstack/react-router": "^1.160.2",
@@ -22,6 +23,7 @@
 		"radix-ui": "^1.4.3",
 		"react": "^19.2.0",
 		"react-dom": "^19.2.0",
+		"react-markdown": "^10.1.0",
 		"tailwind-merge": "^3.4.1",
 		"tailwindcss": "^4.1.18",
 		"zod": "^4.3.6"
