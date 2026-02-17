@@ -1,0 +1,24 @@
+{
+	"name": "arena-agent",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"dev": "pnpm run --parallel dev",
+		"dev:backend": "pnpm -C backend dev",
+		"dev:frontend": "pnpm -C frontend dev",
+		"build": "pnpm run --recursive build",
+		"check": "biome check .",
+		"check:fix": "biome check --write .",
+		"test": "pnpm run --recursive test",
+		"db:generate": "pnpm -C backend db:generate",
+		"db:migrate": "pnpm -C backend db:migrate"
+	},
+	"engines": {
+		"node": ">=20",
+		"pnpm": ">=9"
+	},
+	"packageManager": "pnpm@9.15.0",
+	"devDependencies": {
+		"@biomejs/biome": "^2.4.2"
+	}
+}
