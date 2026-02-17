@@ -157,19 +157,28 @@ Run the ENTIRE combat to completion. Do not stop and ask for input. Be dramatic 
 				const result = await arenaMasterAgent.stream(prompt, { maxSteps: 100 });
 				let fullText = "";
 
-				const reader = result.textStream.getReader();
+				const reader = result.fullStream.getReader();
 
 				while (true) {
 					const { done, value } = await reader.read();
 					if (done) break;
 
-					fullText += value;
-
-					await stream.writeSSE({
-						data: JSON.stringify({ type: "chunk", text: value }),
-						event: "chunk",
-						id: String(eventId++),
-					});
+					if (value.type === "text-delta") {
+						const text = value.payload.delta;
+						fullText += text;
+						await stream.writeSSE({
+							data: JSON.stringify({ type: "chunk", text }),
+							event: "chunk",
+							id: String(eventId++),
+						});
+					} else if (value.type === "tool-result") {
+						const { toolName, result: toolResult } = value.payload;
+						await stream.writeSSE({
+							data: JSON.stringify({ type: "tool-result", toolName, result: toolResult }),
+							event: "tool-result",
+							id: String(eventId++),
+						});
+					}
 				}
 
 				// Save the full combat log as a single assistant message
